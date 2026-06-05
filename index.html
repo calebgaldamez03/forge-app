@@ -304,6 +304,43 @@ const EXERCISES = [
 ];
 
 // ═══════════════════════════════════════════════════════
+// SUPABASE CONFIG
+// ═══════════════════════════════════════════════════════
+const SUPABASE_URL = 'https://dtzejjlpubjdopruvqcl.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR0emVqamxwdWJqZG9wcnV2cWNsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA2MjczMDgsImV4cCI6MjA5NjIwMzMwOH0.oDBRX1p2IoJ3cyFJF6dbdx1nrs8Qp7PiFxl4fFkG1BA';
+
+let supabase = null;
+
+// Cargar Supabase
+const script = document.createElement('script');
+script.src = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2';
+document.head.appendChild(script);
+
+script.onload = () => {
+  const { createClient } = window.supabase;
+  supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+  loadStateFromSupabase();
+};
+
+async function loadStateFromSupabase() {
+  if (!supabase) return;
+  try {
+    const { data: weights } = await supabase.from('weights').select('*');
+    const { data: routines } = await supabase.from('routines').select('*');
+    const { data: workouts } = await supabase.from('workouts').select('*');
+    
+    state.weights = weights || [];
+    state.routines = routines || [];
+    state.workouts = workouts || [];
+    
+    renderHome();
+  } catch (err) {
+    console.error('Error cargando desde Supabase:', err);
+    loadLocal();
+  }
+}
+
+// ═══════════════════════════════════════════════════════
 // STATE
 // ═══════════════════════════════════════════════════════
 let state = { weights: [], workouts: [], routines: [] };
@@ -334,8 +371,45 @@ function loadState() {
   if (saved) state = JSON.parse(saved);
 }
 
-function saveState() {
+async function saveState() {
+  // Siempre guardar en localStorage como backup
   localStorage.setItem('forge', JSON.stringify(state));
+  
+  if (!supabase) return;
+  
+  try {
+    // Guardar pesos
+    for (const w of state.weights) {
+      await supabase.from('weights').upsert({
+        date: w.date,
+        kg: w.kg
+      }, { onConflict: 'date' });
+    }
+    
+    // Guardar rutinas
+    for (const r of state.routines) {
+      await supabase.from('routines').upsert({
+        id: r.id,
+        name: r.name,
+        days: r.days,
+        exercises: r.exercises
+      }, { onConflict: 'id' });
+    }
+    
+    // Guardar entrenamientos
+    for (const w of state.workouts) {
+      await supabase.from('workouts').upsert({
+        id: w.id,
+        routine_id: w.routineId,
+        routine_name: w.routineName,
+        date: w.date,
+        duration: w.duration,
+        exercises: w.exercises
+      }, { onConflict: 'id' });
+    }
+  } catch (err) {
+    console.error('Error guardando en Supabase:', err);
+  }
 }
 
 // ═══════════════════════════════════════════════════════
