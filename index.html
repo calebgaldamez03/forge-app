@@ -302,7 +302,6 @@ const EXERCISES = [
   {id:23, name:'Tricep Dips', muscle:'arms', equipment:'bodyweight'},
   {id:24, name:'Overhead Tricep Extension', muscle:'arms', equipment:'dumbbell'},
 ];
-
 // ═══════════════════════════════════════════════════════
 // SUPABASE CONFIG
 // ═══════════════════════════════════════════════════════
@@ -310,59 +309,80 @@ const SUPABASE_URL = 'https://dtzejjlpubjdopruvqcl.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR0emVqamxwdWJqZG9wcnV2cWNsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA2MjczMDgsImV4cCI6MjA5NjIwMzMwOH0.oDBRX1p2IoJ3cyFJF6dbdx1nrs8Qp7PiFxl4fFkG1BA';
 
 let supabase = null;
+let state = { weights: [], workouts: [], routines: [] };
 
-// Cargar Supabase
 const script = document.createElement('script');
 script.src = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2';
 document.head.appendChild(script);
 
 script.onload = () => {
-  if (window.supabase && window.supabase.createClient) {
-    supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-    loadStateFromSupabase();
-  } else {
-    console.error('Supabase no cargó correctamente');
-    loadLocal();
-  }
+  supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+  loadStateFromSupabase();
 };
 
 async function loadStateFromSupabase() {
-  if (!supabase) return;
+  if (!supabase) { loadLocal(); return; }
   try {
     const { data: weights } = await supabase.from('weights').select('*');
     const { data: routines } = await supabase.from('routines').select('*');
     const { data: workouts } = await supabase.from('workouts').select('*');
-    
-    state.weights = weights || [];
-    state.routines = routines || [];
-    state.workouts = workouts || [];
-    
+    state = { weights: weights || [], routines: routines || [], workouts: workouts || [] };
     renderHome();
   } catch (err) {
-    console.error('Error cargando desde Supabase:', err);
+    console.error('Error Supabase:', err);
     loadLocal();
   }
 }
 
-// ═══════════════════════════════════════════════════════
-// STATE
-// ═══════════════════════════════════════════════════════
-let state = { weights: [], workouts: [], routines: [] };
+
 let currentWorkout = null;
 let buildingRoutine = { exercises: [] };
 let filterMuscle = '';
 let pendingExerciseForConfig = null;
 
 // ═══════════════════════════════════════════════════════
+// LOCAL STORAGE BACKUP
+// ═══════════════════════════════════════════════════════
+function loadLocal() {
+  const saved = localStorage.getItem('forge');
+  if (saved) {
+    try { state = JSON.parse(saved); } catch(e) {}
+  }
+  renderHome();
+  renderRoutines();
+  renderProgress();
+}
+
+function saveState() {
+  localStorage.setItem('forge', JSON.stringify(state));
+  
+  if (!supabase) return;
+  
+  try {
+    for (const w of state.weights) {
+      supabase.from('weights').upsert({ date: w.date, kg: w.kg }, { onConflict: 'date' });
+    }
+    for (const r of state.routines) {
+      supabase.from('routines').upsert({ id: r.id, name: r.name, days: r.days, exercises: r.exercises }, { onConflict: 'id' });
+    }
+    for (const w of state.workouts) {
+      supabase.from('workouts').upsert({ id: w.id, routine_id: w.routineId, routine_name: w.routineName, date: w.date, duration: w.duration, exercises: w.exercises }, { onConflict: 'id' });
+    }
+  } catch (err) {
+    console.error('Error guardando:', err);
+  }
+}
+
+// ═══════════════════════════════════════════════════════
 // INIT
 // ═══════════════════════════════════════════════════════
 function init() {
-  loadState();
   updateClock();
   setInterval(updateClock, 60000);
-  renderHome();
-  renderExercises();
+  loadExercises();
 }
+
+init();
 
 function updateClock() {
   const h = new Date().getHours();
