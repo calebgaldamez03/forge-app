@@ -317,9 +317,13 @@ script.src = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2';
 document.head.appendChild(script);
 
 script.onload = () => {
-  const { createClient } = window.supabase;
-  supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
-  loadStateFromSupabase();
+  if (window.supabase && window.supabase.createClient) {
+    supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+    loadStateFromSupabase();
+  } else {
+    console.error('Supabase no cargó correctamente');
+    loadLocal();
+  }
 };
 
 async function loadStateFromSupabase() {
